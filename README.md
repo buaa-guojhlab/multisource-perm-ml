@@ -123,6 +123,7 @@ If you find this code or our research useful, please cite our paper:
   year={2025},
   note={To be published / Preprint available at [Link]}
 }
+```
 
 ## 🛡️ License
 
