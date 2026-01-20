@@ -1,0 +1,108 @@
+# 超参数优化配置
+
+# 数据配置
+data:
+  train_data: "data/4.2T"
+  train_excel: "data/4.2T.xlsx"
+  val_data: "data/4.2V"
+  val_excel: "data/4.2V.xlsx"
+  image_pred_path: "predictions/image_predictions.csv"
+  physics_pred_path: "predictions/physics_predictions.csv"
+  true_values_path: "predictions/true_values.csv"
+
+# 优化配置
+optimization:
+  trials_per_model: 50
+  timeout_per_trial: 3600  # 每个试验最大秒数
+  seed: 42
+  
+  # 剪枝配置
+  pruning:
+    enabled: true
+    patience: 5  # 连续多少轮没有改进后剪枝
+    
+  # 采样器配置
+  sampler:
+    type: "TPE"  # TPE, Random, CMA-ES, Grid
+    seed: 42
+
+# 模型特定搜索空间
+search_spaces:
+  base_cnn:
+    lr:
+      type: "loguniform"
+      low: 1e-4
+      high: 1e-1
+    weight_decay:
+      type: "loguniform"
+      low: 1e-5
+      high: 1e-2
+    momentum:
+      type: "float"
+      low: 0.8
+      high: 0.99
+    batch_size:
+      type: "categorical"
+      choices: [16, 32, 64]
+    leaky_relu_slope:
+      type: "float"
+      low: 0.01
+      high: 0.2
+  
+  feature_concat:
+    lr:
+      type: "loguniform"
+      low: 1e-4
+      high: 1e-1
+    weight_decay:
+      type: "loguniform"
+      low: 1e-5
+      high: 1e-2
+    momentum:
+      type: "float"
+      low: 0.8
+      high: 0.99
+    batch_size:
+      type: "categorical"
+      choices: [16, 32, 64]
+  
+  cross_attention:
+    lr:
+      type: "loguniform"
+      low: 1e-4
+      high: 1e-1
+    weight_decay:
+      type: "loguniform"
+      low: 1e-5
+      high: 1e-2
+    momentum:
+      type: "float"
+      low: 0.8
+      high: 0.99
+    batch_size:
+      type: "categorical"
+      choices: [16, 32, 64]
+    attention_dim:
+      type: "categorical"
+      choices: [2048, 4096, 8192]
+  
+  svm_fusion:
+    C:
+      type: "loguniform"
+      low: 1e-2
+      high: 1e2
+    epsilon:
+      type: "loguniform"
+      low: 1e-2
+      high: 1e2
+    gamma:
+      type: "loguniform"
+      low: 1e-2
+      high: 1e2
+
+# 输出配置
+output:
+  directory: "optimization_results"
+  save_visualizations: true
+  save_study: true  # 保存完整的Optuna study对象
+  generate_report: true
