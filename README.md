@@ -4,9 +4,9 @@
 [![Python](https://img.shields.io/badge/Python-3.8%2B-blue)](https://www.python.org/)
 [![Framework](https://img.shields.io/badge/PyTorch-1.10%2B-orange)](https://pytorch.org/)
 
-This repository contains the official implementation of the paper: **"[Permeability Prediction Method for Ablative Porous Materials by Integrat-ing Multi-Source Data]"**.
+This repository contains the official implementation of the paper: **"Permeability prediction method for thermal protective porous materials by integrating multi-source data (in Chinese)"**.
 
-We propose a deep learning framework to predict the permeability of **porous thermal protection materials (TPMs)** by integrating microstructure images and macroscopic descriptors. The model leverages **DSMC simulations** as ground truth and explores three multi-source fusion strategies:
+We propose a deep learning framework to predict the permeability of **porous thermal protection materials (TPMs)** by integrating microstructure images and macroscopic descriptors. The model leverages **Direct Simulation Monte Carlo (DSMC) simulations** as ground truth and explores three multi-source fusion strategies:
 
 1.  **Decision-level Fusion**: Fusing predictions from separate image and scalar branches.
 2.  **Feature Concatenation**: Concatenating latent features from CNN and MLP encoders.
@@ -16,15 +16,32 @@ We propose a deep learning framework to predict the permeability of **porous the
 
 ```bash
 multisource-perm-ml/
-├── assets/             # Images for README (e.g., model architecture)
-├── data/
-│   └── samples/        # Minimal sample data for sanity check
-├── models/             # Neural network definitions (Fusion modules)
-├── utils/              # Helper functions for preprocessing and metrics
-├── train.py            # Main training script
-├── test.py             # Evaluation script
-├── requirements.txt    # Python dependencies
-└── README.md
+├── models/                     # Neural network definitions
+│   ├── base_cnn.py            # 3D CNN for image analysis
+│   ├── feature_concat.py      # Feature concatenation model
+│   ├── cross_attention.py     # Cross-modal attention model
+│   └── decision_fusion.py     # Decision-level fusion models
+├── utils/                     # Helper functions and utilities
+│   ├── data_loader.py         # Data loading and preprocessing
+│   ├── optimization.py        # Hyperparameter optimization with Optuna
+│   ├── metrics.py             # Evaluation metrics
+│   ├── visualization.py       # Visualization tools
+│   ├── logger.py              # Training logger
+│   └── model_config.py        # Model configuration management
+├── config/                    # Configuration files
+├── data/                      # Data directory (to be populated by user)
+├── checkpoints/               # Model checkpoints (created during training)
+├── physics_models/            # Physics branch models (created by train_physics_branch.py)
+├── logs/                      # Training logs (created during training)
+├── results/                   # Evaluation results (created during testing)
+├── predictions/               # Prediction results (created during testing)
+├── optimization_results/      # Hyperparameter optimization results
+├── train.py                   # Main training script (image branch)
+├── train_physics_branch.py    # Physics branch training script
+├── test.py                    # Main testing/evaluation script
+├── optimize_models.py         # Hyperparameter optimization script
+├── requirements.txt           # Python dependencies
+└── README.md                  # This file
 ```
 
 ## 🚀 Getting Started
@@ -50,28 +67,20 @@ pip install -r requirements.txt
 #### Data Availability
 The full DSMC simulation dataset used in our paper is **not publicly available** at this time due to ongoing research and intellectual property restrictions.
 
-However, we provide a **minimal sample dataset** in the `data/samples/` folder. This allows users to run the code immediately to verify the pipeline and model architecture.
+However, we provide a **minimal sample dataset** in the `data` folder. This allows users to run the code immediately to verify the pipeline and model architecture.
 
-#### Using Your Own Data
+#### Using Your Own Data (Data format)
 To train the model on your own dataset, please organize your files as follows:
 
-1.  **Microstructure Images:** Place images (e.g., `.png`, `.tif`) in a specific directory.
-    * Recommended input size: `256x256` (grayscale or RGB).
-2.  **Macro Descriptors:** Provide a CSV file containing the descriptors and permeability labels.
-
-**Expected CSV Format:**
-```csv
-filename,       porosity,  tortuosity,  permeability_label
-sample_01.png,  0.45,      1.2,         1.5e-10
-sample_02.png,  0.50,      1.1,         2.1e-10
-...
-```
+1.  **Microstructure Images:** Stored as `.mat` files containing a 3D matrix named `tiffStack`.
+2.  **Labels & Descriptors:** Provided in `.xlsx` format, including porosity, tortuosity, and the permeability labels.
+    * Permeability is internally transformed using the logic: `(log10(x) + 11) / 2`.
 
 #### Run Demo
 You can run a quick training session using the provided sample data to perform a sanity check:
 
 ```bash
-python train.py --data_dir data/samples --batch_size 2 --epochs 1
+python train.py --strategy base --epochs 1 --batch_size 2
 ```
 
 ### 3. Usage
@@ -79,35 +88,113 @@ python train.py --data_dir data/samples --batch_size 2 --epochs 1
 #### Training
 You can train the model using different fusion strategies by specifying the `--strategy` argument.
 
-**Option 1: Cross-modal Attention (Recommended)**
+**Option 1: Base physics model**
 ```bash
-python train.py --strategy attention --epochs 100 --batch_size 32
+# Train physics branch model
+python train_physics_branch.py \
+    --data_path data/Train_set.xlsx \
+    --output_dir physics_models \
+    --model_type random_forest
+
+# Generate predictions from physics branch
+python train_physics_branch.py --mode predict \
+    --model_path physics_models/best_physics_model.pkl \
+    --train_data data/Train_set.xlsx \
+    --val_data data/Valid_set.xlsx \
+    --test_data data/Test_set.xlsx \
+    --output_file predictions/physics_predictions.csv
 ```
 
-**Option 2: Feature Concatenation**
+**Option 2: Base CNN model**
 ```bash
-python train.py --strategy concat --epochs 100 --batch_size 32
+# Base CNN model (image-only)
+python train.py --strategy base \
+    --train_data data/Train_set --train_excel data/Train_set.xlsx \
+    --val_data data/Valid_set --val_excel data/Valid_set.xlsx
 ```
 
 **Option 3: Decision-level Fusion**
 ```bash
-python train.py --strategy decision --epochs 100 --batch_size 32
+# Train decision-level fusion (requires both branches)
+python train.py --strategy decision \
+    --fusion_method all \
+    --image_model_path checkpoints/best_model_base.pth \
+    --physics_model_path predictions/physics_predictions.csv
 ```
+
+**Option 4: Feature Concat Fusion**
+```bash
+python train.py --strategy concat \
+    --train_data data/Train_set --train_excel data/Train_set.xlsx \
+    --val_data data/Valid_set --val_excel data/Valid_set.xlsx
+```
+
+**Option 5: Cross-modal Attention Fusion**
+```bash
+python train.py --strategy attention \
+    --train_data data/Train_set --train_excel data/Train_set.xlsx \
+    --val_data data/Valid_set --val_excel data/Valid_set.xlsx
+```
+
+#### Hyperparameter Optimization
+To optimize the hyperparameters of the model, run the following command:
+```bash
+# Optimize all models
+python optimize_models.py \
+    --models all \
+    --train_data data/Train_set \
+    --train_excel data/Train_set.xlsx \
+    --val_data data/Valid_set \
+    --val_excel data/Valid_set.xlsx \
+    --trials 50 \
+    --visualize
+
+# Optimize specific model
+python optimize_models.py --models attention --trials 30 --visualize
+
+# Use optimized parameters for training
+python train.py --strategy attention --use_best_params --params_dir optimization_results/latest_folder
+```
+
 
 #### Evaluation
 To evaluate the model on the test set using a trained checkpoint:
 
 ```bash
-python test.py --checkpoint checkpoints/best_model_attention.pth
+# Test base CNN model
+python test.py --strategy base \
+    --checkpoint checkpoints/best_model_base.pth \
+    --test_data data/Test_set \
+    --test_excel data/Test_set.xlsx \
+    --save_predictions \
+    --plot_results
+
+# Test attention model
+python test.py --strategy attention \
+    --checkpoint checkpoints/best_model_attention.pth \
+    --test_data data/Test_set \
+    --test_excel data/Test_set.xlsx \
+    --save_predictions \
+    --plot_results
+
+# Test decision-level fusion and compare all methods
+python test.py --strategy decision \
+    --checkpoint fusion_checkpoints/best_fusion_svm.pkl \
+    --image_model_path checkpoints/best_model_base.pth \
+    --physics_model_path predictions/physics_predictions.csv \
+    --compare_all_fusion \
+    --save_predictions \
+    --plot_results
 ```
 
 ## 📊 Results
 
-| Fusion Strategy | RMSE | MAE | R² Score |
-| :--- | :---: | :---: | :---: |
-| Decision-level | 0.XXX | 0.XXX | 0.XX |
-| Feature Concat | 0.XXX | 0.XXX | 0.XX |
-| **Cross-modal Attention** | **0.XXX** | **0.XXX** | **0.XX** |
+| Fusion Strategy | Architecture | RMSE | MAE | R² Score |
+| :--- | :--- | :---: | :---: | :---: |
+| Physics-only | Random Forest | 0.XXX | 0.XXX | 0.XX |
+| Image-only | 3D CNN | 0.XXX | 0.XXX | 0.XX |
+| Feature Concat | MLP + CNN | 0.XXX | 0.XXX | 0.XX |
+| **Cross-modal Attention** | **Q/K/V Attention** | **0.XXX** | **0.XXX** | **0.XX** |
 
 *(Detailed experimental results and analysis can be found in our paper.)*
 
@@ -116,12 +203,15 @@ python test.py --checkpoint checkpoints/best_model_attention.pth
 If you find this code or our research useful, please cite our paper:
 
 ```bibtex
-@article{YourName2025Permeability,
-  title={Prediction of Permeability for Porous TPMs via Multi-Source Fusion},
-  author={Guo, Jinghui and [Student Name] and [Other Authors]},
-  journal={[Journal Name]},
-  year={2025},
-  note={To be published / Preprint available at [Link]}
+@article{2026Permeability,
+  title={Permeability prediction method for thermal protective porous materials by integrating multi-source data},
+  author={Xin, Weihua and Tian, Yuhao and Zhang, Qiming and Guo, Jinghui and Lin, Guiping},
+  journal={Acta Aeronautica et Astronautica Sinica},
+  year={2026},
+  volume={47},
+  number={12},
+  pages={X32866},
+  doi={10.7527/S1000-6893.2025.32866}
 }
 ```
 
@@ -137,5 +227,5 @@ This project is released under the **GNU General Public License v3.0 (GPLv3)**.
 
 This project is maintained by **Prof. Jinghui Guo's Research Group** at Beihang University (BUAA).
 
-  * **Issues:** For technical questions, please open an [Issue](https://www.google.com/search?q=https://github.com/buaa-guojhlab/multisource-perm-ml/issues).
-  * **Lab Website:** []
+  * **Issues:** For technical questions, please open an [Issue](https://github.com/buaa-guojhlab/multisource-perm-ml/issues/new/choose).
+  * **Website:** [Jinghui Guo's research group](http://shi.buaa.edu.cn/guojinghui1/zh_CN/index.htm).
